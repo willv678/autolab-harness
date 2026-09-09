@@ -1,0 +1,7 @@
+# Ignore local run artifacts and large datasets
+autolab_experiments/
+*.jsonl
+__pycache__/
+.venv/
+.env
+*.log
