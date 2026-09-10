@@ -23,7 +23,7 @@ Your objective is to expose controller failures and near-collision edge cases in
    - MUST be an exact multiple of 500000.
    - Allowed values: 500000, 1000000, 1500000, 2000000, 2500000.
 2. 'route_start_offset_m': Longitudinal offset in meters where the ego vehicle enters the route.
-   - Valid float range: [-5.0, 10.0].
+   - Valid float range: [3.5, 5.5].
 
 Analyze the previous run telemetry. If the run was safe (no collision, low trajectory deviation), push the parameters toward tighter reaction margins. If the run crashed or went off-road, explore the critical sensitivity boundary near those values.
 
@@ -39,11 +39,20 @@ You must respond ONLY with a single valid JSON object strictly matching this sch
 # -----------------------------------------------------------------------------
 def query_agent(last_metrics: dict, last_knobs: dict) -> dict:
     """Prompt the local Ollama instance to generate the next parameter mutation."""
-    user_prompt = (
-        f"Previous Parameters: {json.dumps(last_knobs)}\n"
-        f"Previous Execution Telemetry: {json.dumps(last_metrics)}\n\n"
-        "Generate the next parameter set to stress-test the controller."
-    )
+    if last_metrics.get("status") == "SIMULATION_CRASHED":
+        user_prompt = (
+            f"Previous Parameters: {json.dumps(last_knobs)}\n"
+            "Execution Status: SPAWN_INITIALIZATION_CRASH.\n"
+            "The vehicle pose failed before simulation start.\n"
+            "Constraint: Keep route_start_offset_m strictly between 3.5 and 5.5 meters.\n\n"
+            "Generate the next parameter set to stress-test the controller."
+        )
+    else:
+        user_prompt = (
+            f"Previous Parameters: {json.dumps(last_knobs)}\n"
+            f"Previous Execution Telemetry: {json.dumps(last_metrics)}\n\n"
+            "Generate the next parameter set to stress-test the controller."
+        )
 
     payload = {
         "model": MODEL_NAME,
@@ -52,7 +61,7 @@ def query_agent(last_metrics: dict, last_knobs: dict) -> dict:
         "stream": False,
         "options": {
             "temperature": 0.5,
-            "num_predict": 128
+            "num_predict": 256
         }
     }
 
@@ -70,7 +79,7 @@ def query_agent(last_metrics: dict, last_knobs: dict) -> dict:
 
         knobs = {
             "force_gt_duration_us": valid_gt,
-            "route_start_offset_m": round(float(max(-5.0, min(10.0, parsed.get("route_start_offset_m", 0.0)))), 2),
+            "route_start_offset_m": round(float(max(3.5, min(5.5, parsed.get("route_start_offset_m", 4.5)))), 2),
             "reasoning": str(parsed.get("reasoning", "No rationale provided."))
         }
         return knobs
@@ -78,8 +87,8 @@ def query_agent(last_metrics: dict, last_knobs: dict) -> dict:
     except Exception as e:
         print(f"[!] Warning: LLM query failed or produced malformed JSON ({e}). Using heuristic fallback.")
         return {
-            "force_gt_duration_us": 1400000,
-            "route_start_offset_m": 1.5,
+            "force_gt_duration_us": 1500000,
+            "route_start_offset_m": 4.5,
             "reasoning": "Fallback mutation due to inference error."
         }
 
@@ -102,8 +111,6 @@ def parse_telemetry(run_dir: Path) -> dict:
     run_dir / "aggregate" / "metrics_results.parquet",
     run_dir / "aggregate" / "metrics_unprocessed.parquet",
     ]
-    parquet_candidates.extend(list(run_dir.glob("rollouts/**/metrics.parquet")))
-    # Check per-rollout paths if aggregate is absent
     parquet_candidates.extend(list(run_dir.glob("rollouts/**/metrics.parquet")))
 
     found_parquet = next((p for p in parquet_candidates if p.exists()), None)
@@ -187,6 +194,16 @@ def run_simulation(iteration: int, knobs: dict) -> dict:
             "offroad": True,
             "status": "SIMULATION_CRASHED"
         }
+    finally:
+        # Tear down containers and prune stale networks
+        compose_file = run_dir / "docker-compose.yaml"
+        if compose_file.exists():
+            subprocess.run(
+                ["docker", "compose", "-f", str(compose_file), "down", "--remove-orphans"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        subprocess.run(["docker", "network", "prune", "-f"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     elapsed = (datetime.now() - start_time).total_seconds()
     print(f"[*] Simulation step completed in {elapsed:.1f}s")
@@ -209,13 +226,13 @@ def log_dataset_sample(prompt_metrics: dict, chosen_knobs: dict, result_metrics:
         f.write(json.dumps(record) + "\n")
 
 def main():
-    total_iterations = 20
+    total_iterations = 100
     BASE_RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Initial baseline seeds
     current_knobs = {
-        "force_gt_duration_us": 1700000,
-        "route_start_offset_m": 0.0,
+        "force_gt_duration_us": 1500000,
+        "route_start_offset_m": 4.5,
         "reasoning": "Baseline standard execution"
     }
     current_metrics = {

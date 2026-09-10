@@ -1,24 +1,26 @@
-# AutoLab: LLM-Driven Autonomous Vehicle Red-Teaming Harness
+# AutoLab Harness
 
-An agentic test harness designed to systematically discover failure boundaries and edge cases in autonomous driving controllers using closed-loop simulation.
+Autonomous closed-loop red-teaming harness for AV controllers using local LLM agents and containerized simulation telemetry.
 
-## Architecture
-1. **Test-Master Agent:** Local reasoning LLM (e.g., Qwen 2.5) that analyzes prior telemetry and proposes mutated scenario parameters.
-2. **Simulation Bridge:** Programmatically injects configuration overrides and triggers containerized multi-service validation.
-3. **Telemetry Engine:** Ingests parquet metrics and event logs to evaluate trajectory deviation, progress, and fault conditions.
+## System Overview
+
+AutoLab automates failure discovery for autonomous driving controllers inside NVIDIA AlpaSim. A local reasoning model (Qwen 2.5) evaluates rollout telemetry and iteratively mutates control and initialization boundaries.
+
+![Failure Boundary](failure_boundary.png)
+
+## Repository Structure
+
+- `autolab_loop.py`: Primary orchestration loop, Ollama client, and simulation execution bridge.
+- `plot_boundaries.py`: Telemetry parser and sensitivity boundary scatter plotter.
+- `format_sft.py`: SFT pipeline converter that formats execution traces into ChatML JSONL.
 
 ## Quick Start
-```bash
-python autolab_loop.py```
 
-### 5. Push to GitHub
+1. Install required packages:
+   pip install -r requirements.txt
 
-1. Go to GitHub and create a **new public repository** named `autolab-harness` (leave it completely empty—don't initialize with a README or license, since you just made your own).
-2. Link and push your local repo:
+2. Ensure local Ollama instance is active:
+   ollama run qwen2.5-coder:3b
 
-```bash
-git add .
-git commit -m "feat: Initial commit of AutoLab agent harness and loop orchestration"
-git branch -M main
-git remote add origin https://github.com/<your-github-username>/autolab-harness.git
-git push -u origin main
+3. Execute batch harness:
+   python autolab_loop.py
