@@ -1,7 +1,10 @@
-# Ignore local run artifacts and large datasets
-autolab_experiments/
-*.jsonl
 __pycache__/
+*.py[cod]
 .venv/
-.env
+autolab_experiments/
+*.parquet
 *.log
+*.jsonl
+!autolab_dataset_clean.jsonl
+!sft_train.jsonl
+!sft_val.jsonl
