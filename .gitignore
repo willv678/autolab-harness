@@ -1,10 +1,10 @@
-__pycache__/
-*.py[cod]
 .venv/
+__pycache__/
+*.pyc
 autolab_experiments/
+autolab_baselines/
+autolab_lora_adapter/
+*.safetensors
+*.bin
 *.parquet
-*.log
-*.jsonl
-!autolab_dataset_clean.jsonl
-!sft_train.jsonl
-!sft_val.jsonl
+*.mp4
